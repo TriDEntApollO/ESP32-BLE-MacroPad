@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CronoDeck</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #1e1e1e; color: #ffffff; }
+        table { margin: 30px auto; }
+        td { width: 80px; height: 80px; text-align: center; border: 1px solid #b6b6b6;  border-radius: 5px;}
+        input { width: 100%; height: 100%; text-align: center; font-size: 25px; background-color: #2b2b2b; color: #ffffff; border: none; box-sizing: border-box; }
+        select, button { background-color: #2b2b2b; color: #ffffff; padding: 5px; font-size: 16px; border: none; cursor: pointer; }
+        button { background-color: #007BFF; padding: 14px 14px; border-radius: 5px; }
+        button:hover { background-color: #0056b3; }
+        .layer-controls { margin: 20px 0; }
+        .status-bar { width: 100%; padding: 10px; font-size: 18px; font-weight: bold; text-align: center; position: fixed; bottom: 0; left: 0; }
+        .connected { background-color: #28a745; color: white; }
+        .disconnected { background-color: #dc3545; color: white; }
+        .layers { width: 40px; height: 40px; text-align: center; padding: 10px 10px; font-size: 18px;  border-radius: 5px;}
+        .macro-container { margin: 20px; }
+        .macro-input { width: 400px; height: 40px; font-size: 16px; padding: 10px; border-radius: 5px; }
+        .select-editable { position: relative; display: inline-block; }
+        .select-editable select, .select-editable input { width: 150px; padding: 5px; font-size: 16px; border-radius: 5px; border: 1px solid grey; }
+    </style>
+</head>
+<body>
+    <h2>CronoDeck Keymap Editor</h2>
+    
+    <div class="layer-controls">
+        <label for="layerCount">Active Layers:</label>
+        <input class="layers" type="text" id="layerCount" value="4" readonly>
+        <button onclick="changeActiveLayers(1)">+</button>
+        <button onclick="changeActiveLayers(-1)">-</button>
+    </div>
+    
+    <div class="layer-options">
+        <label for="layerSelect">Select Layer:</label>
+        <div class="select-editable">
+            <select id="layerSelect" onchange="updateLayerInput(); loadKeymap()"></select>
+            <input type="text" maxlength="10" id="layerInput">
+        </div>
+        <button onclick="updateLayerName()">Update Name</button>
+    </div>
+    
+    <table>
+        <tbody>
+            <tr>
+                <td><input type="text" maxlength="1" id="cell-0-0"></td>
+                <td><input type="text" maxlength="1" id="cell-0-1"></td>
+                <td><input type="text" maxlength="1" id="cell-0-2"></td>
+            </tr>
+            <tr>
+                <td><input type="text" maxlength="1" id="cell-1-0"></td>
+                <td><input type="text" maxlength="1" id="cell-1-1"></td>
+                <td><input type="text" maxlength="1" id="cell-1-2"></td>
+            </tr>
+            <tr>
+                <td><input type="text" maxlength="1" id="cell-2-0"></td>
+                <td><input type="text" maxlength="1" id="cell-2-1"></td>
+                <td><input type="text" maxlength="1" id="cell-2-2"></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <button onclick="submitKeymap()">Update Key Map</button>
+
+    <div class="macro-container">
+        <label for="macroMessage">Macro Message:</label>
+        <input type="text" id="macroMessage" class="macro-input">
+        <button onclick="updateMacroMessage()">Update</button>
+    </div>
+
+    <div id="statusBar" class="status-bar disconnected">Disconnected</div>
+
+    <script>
+        let activeLayers = 1;
+
+        function changeActiveLayers(value) {
+            let newLayers = activeLayers + value;
+            if (newLayers < 1 || newLayers > 10) return;
+            let xhr = new XMLHttpRequest();
+            xhr.open("POST", `/changeActiveLayers?value=${newLayers}`, true);
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    activeLayers = newLayers;
+                    document.getElementById("layerCount").value = activeLayers;
+                    loadLayerOptions(); 
+                } else {
+                    alert(xhr.responseText);
+                }
+            };
+            xhr.send();
+        }
+
+        function loadLayerOptions() {
+            let xhr = new XMLHttpRequest();
+            xhr.open("GET", "/getLayerNames", true);
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    let layers = JSON.parse(xhr.responseText);
+                    let select = document.getElementById("layerSelect");
+                    select.innerHTML = "";
+                    layers.forEach((name, index) => {
+                        let option = document.createElement("option");
+                        option.value = index;
+                        option.textContent = name;
+                        select.appendChild(option);
+                    });
+                    updateLayerInput();
+                    loadKeymap();
+                }
+            };
+            xhr.send();
+        }
+
+        function updateLayerInput() {
+            let select = document.getElementById("layerSelect");
+            let input = document.getElementById("layerInput");
+            input.value = select.options[select.selectedIndex].text;
+        }
+
+        function updateLayerName() {
+            let select = document.getElementById("layerSelect");
+            let input = document.getElementById("layerInput");
+            let selectedIndex = select.selectedIndex;
+            if (selectedIndex >= 0) {
+                select.options[selectedIndex].text = input.value;
+                let index = select.value;
+                let xhr = new XMLHttpRequest();
+                xhr.open("POST", "/updateLayerName", true);
+                xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+                xhr.send(`index=${index}&name=${encodeURIComponent(input.value)}`);
+            }
+        }
+
+        function loadMacroMessage() {
+            let xhr = new XMLHttpRequest();
+            xhr.open("GET", "/getMacroMessage", true);
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    document.getElementById("macroMessage").value = xhr.responseText;
+                } else {
+                    alert("Error loading macro message: " + xhr.responseText);
+                }
+            };
+            xhr.send();
+        }
+
+        function updateMacroMessage() {
+            let newMessage = document.getElementById("macroMessage").value;
+            let xhr = new XMLHttpRequest();
+            xhr.open("POST", "/updateMacroMessage", true);
+            xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+            xhr.send(`message=${encodeURIComponent(newMessage)}`);
+            xhr.onload = function () {
+                alert(xhr.status === 200 ? "Macro message updated successfully!" : "Error updating macro message: " + xhr.responseText);
+            };
+        }
+
+        function submitKeymap() {
+            let layer = document.getElementById("layerSelect").value;
+            let keymapData = "";
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 3; col++) {
+                    let cellValue = document.getElementById(`cell-${row}-${col}`).value || " ";
+                    keymapData += cellValue;
+                }
+            }
+            let xhr = new XMLHttpRequest();
+            xhr.open("POST", "/submitKeymap", true);
+            xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+            xhr.send(`layer=${layer}&data=${keymapData}`);
+            xhr.onload = function () {
+                alert(xhr.status === 200 ? "Keymap updated successfully!" : "Error updating keymap: " + xhr.responseText);
+            };
+        }
+
+        function loadKeymap() {
+            console.log("Loading keymap for layer: " + document.getElementById("layerSelect").value);
+            let layer = document.getElementById("layerSelect").value;
+            let xhr = new XMLHttpRequest();
+            xhr.open("GET", `/getKeymap?layer=${layer}`, true);
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    let keymap = JSON.parse(xhr.responseText);
+                    for (let row = 0; row < 3; row++) {
+                        for (let col = 0; col < 3; col++) {
+                            document.getElementById(`cell-${row}-${col}`).value = keymap[row][col].trim();
+                        }
+                    }
+                } else {
+                    alert("Error loading keymap: " + xhr.responseText);
+                }
+            };
+            xhr.send();
+            console.log("Keymap loaded for layer: " + layer);
+        }
+
+        function checkESP32Connection() {
+            let xhr = new XMLHttpRequest();
+            xhr.open("GET", "/status", true);
+            xhr.onload = function () {
+                let statusBar = document.getElementById("statusBar");
+                if (xhr.status === 200 && xhr.responseText.trim() === "connected") {
+                    statusBar.className = "status-bar connected";
+                    statusBar.textContent = "Connected";
+                } else {
+                    statusBar.className = "status-bar disconnected";
+                    statusBar.textContent = "Disconnected";
+                }
+            };
+            xhr.onerror = function () {
+                document.getElementById("statusBar").className = "status-bar disconnected";
+                document.getElementById("statusBar").textContent = "Disconnected";
+            };
+            xhr.send();
+        }
+
+        function initialize() {
+            setTimeout(() => {
+                checkESP32Connection();
+                let xhr = new XMLHttpRequest();
+                xhr.open("GET", "/getActiveLayers", true); // New API endpoint to get active layers
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        activeLayers = parseInt(xhr.responseText) || 4;
+                        document.getElementById("layerCount").value = activeLayers;
+                        loadLayerOptions();
+                        loadMacroMessage();
+                    }
+                    else {
+                        alert("Error fetching active layers: " + xhr.responseText);
+                    }
+                };
+                xhr.send();
+            }, 500);
+        }
+
+        window.onload = initialize();
+        setInterval(checkESP32Connection, 5000);
+    </script>
+</body>
+</html>

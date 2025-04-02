@@ -1,0 +1,150 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <RotaryEncoder.h>
+#include <Adafruit_SH110X.h>
+
+#define WHITE 1
+#define BLACK 0
+#define PIN_IN1 32
+#define PIN_IN2 33
+#define OLED_RESET -1
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define SCREEN_ADDRESS 0x3C
+
+static const unsigned char _bullet[] PROGMEM = {0x1f,0x3f,0x7f,0x7f,0x7f,0x7f,0x7f,0x7f,0x7f,0x7f,0x7f,0x7f,0x7f,0x7f,0x3f,0x1f};
+static const unsigned char _selected_box[] PROGMEM = {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x07,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0c,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x18,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x30,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x18,0x7f,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0c,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x07};
+static const unsigned char _scroll_line[] PROGMEM = {0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01};
+
+
+RotaryEncoder *encoder = nullptr;
+Adafruit_SH1106G oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+uint8_t modState = 1;
+const uint8_t modPin = 18;
+uint8_t activeLayers = 4;
+uint8_t selectedLayer = 1;
+static const uint8_t maxLayers = 10; 
+
+uint8_t menuSelLayer;
+uint8_t menuPrevLayer;
+uint8_t menuNextLayer;
+bool menuScreen = false;
+static uint8_t tickCount = 0;
+
+String layerNames[10] = {
+    "Default", "FL Studio", "PhotoShop", "After Effects", "OBS Studio",
+    "Audacity", "CLion", "Figma", "PyCharm", "GoLand"
+};
+
+void IRAM_ATTR checkPosition() {
+    encoder->tick(); // just call tick() to check the state.
+}
+
+void setup() {
+    Serial.begin(115200);
+
+    if(!oled.begin(SCREEN_ADDRESS, true)) {
+        Serial.println(F("SH1106 allocation failed"));
+        for(;;); // Don't proceed, loop forever
+    }
+
+    pinMode(modPin, INPUT_PULLUP);
+
+    // use TWO03 mode when PIN_IN1, PIN_IN2 signals are both LOW or HIGH in latch position.
+    encoder = new RotaryEncoder(PIN_IN1, PIN_IN2, RotaryEncoder::LatchMode::TWO03);
+
+    // register interrupt routine
+    attachInterrupt(digitalPinToInterrupt(PIN_IN1), checkPosition, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_IN2), checkPosition, CHANGE);
+
+    oled.setRotation(2);
+    showScreen();
+}
+
+void loop() {
+    static int pos = 0;
+    encoder->tick(); // just call tick() to check the state.
+
+    int newPos = encoder->getPosition();
+    if (pos != newPos) {
+        tickCount++;
+
+        if (tickCount >= 2) {
+            if (((int)(encoder->getDirection())) == 1) {
+                if (menuScreen) menuSelLayer = menuSelLayer + 1 > activeLayers ? 1 : menuSelLayer + 1;
+                else activeLayers += 1;
+
+            }
+            else {
+                if (menuScreen) menuSelLayer = menuSelLayer - 1 < 1 ? activeLayers : menuSelLayer - 1;
+                else activeLayers -= 1;
+            }
+            showScreen();
+            tickCount = 0;
+        }
+        pos = newPos;
+    }
+
+    if (digitalRead(modPin) != modState) {
+        modState = digitalRead(modPin);
+        if (!modState) {
+            Serial.println("Menu Button");
+            menuScreen = !menuScreen;
+            if (menuScreen) {
+                menuSelLayer = selectedLayer;
+            } else {
+                selectedLayer = menuSelLayer;
+            }
+            showScreen();
+        }
+    }
+}
+
+void showScreen() {
+    if (menuScreen) {
+      drawMenu();
+    } else {
+        oled.clearDisplay();
+        oled.setTextSize(1);
+        oled.setCursor(20, oled.height() - 50);
+        oled.println("Current Active");
+        oled.setCursor(20, oled.height() - 40);
+        oled.print("Layers: ");
+        oled.print(activeLayers);
+        oled.setCursor(20, oled.height() - 20);
+        oled.print("Layer: ");
+        oled.print(layerNames[selectedLayer - 1]);
+        oled.display();
+    }
+}
+
+void drawMenu() {
+    char buffer[15];
+    oled.clearDisplay();
+    
+    oled.drawXBitmap(0, 44, _bullet, 7, 16, WHITE); // Bullet 3
+    oled.drawXBitmap(0, 3, _bullet, 7, 16, WHITE); // Bullet 1
+    oled.drawXBitmap(0, 23, _selected_box, 110, 16, WHITE); // Selected
+    // Set font and draw strings
+    oled.setTextSize(1);
+    oled.setTextColor(WHITE);
+
+    menuNextLayer = menuSelLayer + 1 > activeLayers ? 1 : menuSelLayer + 1;
+    menuPrevLayer = menuSelLayer - 1 < 1 ? activeLayers : menuSelLayer - 1;
+
+    oled.setCursor(11, 7);
+    sprintf(buffer, "%02d %s", menuPrevLayer, layerNames[menuPrevLayer-1]);
+    oled.println(buffer);
+    oled.setCursor(11, 27);
+    sprintf(buffer, "%02d %s", menuSelLayer, layerNames[menuSelLayer-1]);
+    oled.println(buffer);
+    oled.setCursor(11, 48);
+    sprintf(buffer, "%02d %s", menuNextLayer, layerNames[menuNextLayer-1]);
+    oled.println(buffer);
+
+    int scrollbarHeight = 64/activeLayers;
+    oled.drawXBitmap(123, 1, _scroll_line, 1, 61, WHITE); // Scroll line
+    oled.fillRect(121, scrollbarHeight * menuSelLayer - scrollbarHeight, 5, scrollbarHeight, WHITE); // Scroll bar
+    oled.display();
+}
