@@ -19,22 +19,30 @@ BleKeyboard bleKeyboard("CronoDeck", "Trident Apollo", 100);
 Adafruit_SH1106G oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 MacroEngine macro(bleKeyboard);
 
-const char* duckyScript = R"(
-GUI
-DELAY 1000
-PRESS R
-RELEASE ALL
+const char* duckyScript = R"rawliteral(
 GUI r
 DELAY 200
 DELAY INTERVAL 15
-PRINT powershell
+PRINT "powershell"
 DELAY 200
 ENTER
 DELAY 2000
-PRINT echo Hello World
+PRINT "echo 'Hello World'"
 DELAY 200
 ENTER
-)";
+DEKAY 500
+SEND T
+DELAY 200
+PRESS R
+DELAY 200
+PRESS E
+DELAY 700
+RELEASE ALL
+)rawliteral";
+
+void startBluetooth();
+void connect();
+void showScreen();
 
 void setup() {
     Serial.begin(115200);

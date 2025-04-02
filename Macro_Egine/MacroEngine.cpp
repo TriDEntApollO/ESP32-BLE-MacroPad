@@ -59,7 +59,7 @@ class MacroEngine {
                 std::string discard;
                 std::getline(ss, discard); // Consume the rest of the line
                 Serial.print("Ignoring command: ");
-                Serial.println(discard);
+                Serial.println(String(discard.c_str()));
                 return; // Ignore the entire comment line
             }
 
@@ -68,7 +68,7 @@ class MacroEngine {
                 if (text.empty()) return;
 
                 Serial.print("Printing string: ");
-                Serial.println(text);
+                Serial.println(String(text.c_str()));
                 
                 if (command == "STRING" || command == "ECHO") {
                     typeString(text);
@@ -96,7 +96,6 @@ class MacroEngine {
                 std::string key;
                 ss >> key;
                 pressKey(key, true);
-                releaseKey(key);
             }
             else if (command == "RELEASE") {
                 std::string key;
@@ -107,23 +106,25 @@ class MacroEngine {
                 }
             }
             else {
-                std::vector<uint8_t> keysToRelease;
-                bool isModifierLine = isModifierKey(keyMap[command]);
+                std::vector<std::string> keysToRelease;
+                bool isModifierLine = false;
+
+                if (keyMap.find(command) != keyMap.end()) {
+                    isModifierLine = isModifierKey(keyMap[command]);
+                }
                 
-                if (isModifierLine) {}
+                if (isModifierLine) {
                     do {
-                        if (keyMap.find(command) != keyMap.end()) {
-                            uint8_t keyCode = keyMap[command];
-                            pressKey(command, false);
-                            keysToRelease.push_back(keyCode);
-                        }
+                        pressKey(command, false);
+                        keysToRelease.push_back(command);
                     } while (ss >> command);
 
-                    for (uint8_t key : keysToRelease) {
+                    for (std::string key : keysToRelease) {
                         releaseKey(key, false);
                     }
                 } else {
-                    return;
+                    pressKey(command, false);
+                    releaseKey(command, false);
                 }
             }
         }
@@ -170,7 +171,7 @@ class MacroEngine {
                 activeKeys.push_back(keyCode);
             }
             Serial.print("Pressing key: ");
-            Serial.println(keyCode);
+            Serial.println(String(keyCode));
             bleKeyboard.press(keyCode);
         }
 
@@ -189,15 +190,9 @@ class MacroEngine {
             }
 
             if (allowModifiers && isModifierKey(keyCode)) {
-                auto it = std::find(activeModifiers.begin(), activeModifiers.end(), keyCode);
-                if (it != activeModifiers.end()) {
-                    activeModifiers.erase(it);
-                }
+                removeModifier(keyCode);
             } else {
-                auto it = std::find(activeKeys.begin(), activeKeys.end(), keyCode);
-                if (it != activeKeys.end()) {
-                    activeKeys.erase(it);
-                }
+                removeKey(keyCode);
             }
             Serial.print("Releasing key: ");
             Serial.println(keyCode);
