@@ -3,6 +3,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
+#include "MacroEngine.cpp"
+
 #define WHITE 1
 #define BLACK 0
 #define PIN_IN1 32
@@ -15,6 +17,24 @@
 
 BleKeyboard bleKeyboard("CronoDeck", "Trident Apollo", 100);
 Adafruit_SH1106G oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+MacroEngine macro(bleKeyboard);
+
+const char* duckyScript = R"(
+GUI
+DELAY 1000
+PRESS R
+RELEASE ALL
+GUI r
+DELAY 200
+DELAY INTERVAL 15
+PRINT powershell
+DELAY 200
+ENTER
+DELAY 2000
+PRINT echo Hello World
+DELAY 200
+ENTER
+)";
 
 void setup() {
     Serial.begin(115200);
@@ -28,6 +48,7 @@ void setup() {
     startBluetooth();
     connect();
     showScreen();
+    macro.executeScript(duckyScript);
 }
 
 void loop() {

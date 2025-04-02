@@ -6,8 +6,7 @@
 
 
 #include "webpage.h"
-#include "bitmaps.h"
-#include "keymap.cpp"
+#include "KeyMap.cpp"
 
 
 class WebInterface {

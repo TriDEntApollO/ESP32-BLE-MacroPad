@@ -5,8 +5,8 @@
 #include <Adafruit_SH110X.h>
 
 #include "includes/bitmaps.h"
-#include "includes/keymap.cpp"
-#include "includes/webinterface.cpp"
+#include "includes/KeyMap.cpp"
+#include "includes/WebInterface.cpp"
 
 #define WHITE 1
 #define BLACK 0
